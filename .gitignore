@@ -286,3 +286,9 @@ __pycache__/
 *.btm.cs
 *.odx.cs
 *.xsd.cs
+
+DemoWebsite\.Web/Umbraco/
+
+DemoWebsite\.Web/Umbraco_Client/
+
+DemoWebsite\.Web/Media/
