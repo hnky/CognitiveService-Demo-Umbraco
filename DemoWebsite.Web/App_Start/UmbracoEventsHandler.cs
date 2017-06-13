@@ -4,15 +4,12 @@ using System.Configuration;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Web;
 using DemoWebsite.Web.Helpers;
-using Examine;
 using Microsoft.ProjectOxford.Face;
 using Microsoft.ProjectOxford.Face.Contract;
 using Microsoft.ProjectOxford.Vision;
 using Microsoft.ProjectOxford.Vision.Contract;
 using Newtonsoft.Json;
-using umbraco;
 using Umbraco.Core;
 using Umbraco.Core.Events;
 using Umbraco.Core.IO;
@@ -24,36 +21,40 @@ using Face = Microsoft.ProjectOxford.Face.Contract.Face;
 using File = System.IO.File;
 
 
-namespace DemoWebsite.Web.App_Start
+namespace DemoWebsite.Web
 {
 
-    public class MediaEventHandler : ApplicationEventHandler
+    public class UmbracoEventsHandler : ApplicationEventHandler
     {
+
+        private readonly string _visionApiKey = ConfigurationManager.AppSettings["VisionApiKey"];
+        private readonly string _visionApiUrl = ConfigurationManager.AppSettings["VisionApiUrl"];
+
+        private readonly string _faceApiKey = ConfigurationManager.AppSettings["FaceApiKey"];
+        private readonly string _faceApiUrl = ConfigurationManager.AppSettings["FaceApiUrl"];
+        private readonly string _faceApiGroup = ConfigurationManager.AppSettings["FaceApiGroup"];
+
         protected override void ApplicationStarted(UmbracoApplicationBase umbracoApplication, ApplicationContext applicationContext)
         {
             MediaService.Saving += MediaService_Saving;
             MemberService.Saving +=  MemberService_Saving;
         }
 
-        void MediaService_Saving(IMediaService sender, SaveEventArgs<Umbraco.Core.Models.IMedia> e)
+        private void MediaService_Saving(IMediaService sender, SaveEventArgs<Umbraco.Core.Models.IMedia> e)
         {
-            string visionApiKey = ConfigurationManager.AppSettings["VisionApiKey"];
-            string visionApiUrl = ConfigurationManager.AppSettings["VisionApiUrl"];
 
             var fs = FileSystemProviderManager.Current.GetFileSystemProvider<MediaFileSystem>();
-            VisionServiceClient visionServiceClient = new VisionServiceClient(visionApiKey, visionApiUrl);
 
-            string faceApiKey = ConfigurationManager.AppSettings["FaceApiKey"];
-            string faceApiUrl = ConfigurationManager.AppSettings["FaceApiUrl"];
-            string faceApiGroup = ConfigurationManager.AppSettings["FaceApiGroup"];
+            VisionServiceClient visionServiceClient = new VisionServiceClient(_visionApiKey, _visionApiUrl);
 
-            var faceServiceClient = new FaceServiceClient(faceApiKey, faceApiUrl);
-            var umbracoHelper = new UmbracoHelper(UmbracoContext.Current);
+            FaceServiceClient faceServiceClient = new FaceServiceClient(_faceApiKey, _faceApiUrl);
+
 
             foreach (IMedia media in e.SavedEntities)
             {
                 string relativeImagePath = GetImageFilePath(media);
                 string fullPath = fs.GetFullPath(relativeImagePath);
+
 
                 using (Stream imageFileStream = File.OpenRead(fullPath))
                 {
@@ -81,8 +82,7 @@ namespace DemoWebsite.Web.App_Start
                     if (faces.Any())
                     {
                         Guid[] faceIds = faces.Select(a => a.FaceId).ToArray();
-                        IdentifyResult[] results = AsyncHelpers.RunSync(() => faceServiceClient.IdentifyAsync(faceApiGroup, faceIds, 5));
-
+                        IdentifyResult[] results = AsyncHelpers.RunSync(() => faceServiceClient.IdentifyAsync(_faceApiGroup, faceIds, 5));
 
                         var matchedPersons = new List<IMember>();
 
@@ -105,20 +105,17 @@ namespace DemoWebsite.Web.App_Start
         }
 
 
-        void MemberService_Saving(IMemberService sender, SaveEventArgs<IMember> e)
+        private void MemberService_Saving(IMemberService sender, SaveEventArgs<IMember> e)
         {
             var fs = FileSystemProviderManager.Current.GetFileSystemProvider<MediaFileSystem>();
             var umbracoHelper = new UmbracoHelper(UmbracoContext.Current);
-            string faceApiKey = ConfigurationManager.AppSettings["FaceApiKey"];
-            string faceApiUrl = ConfigurationManager.AppSettings["FaceApiUrl"];
-            string faceApiGroup = ConfigurationManager.AppSettings["FaceApiGroup"];
 
-            var faceServiceClient = new FaceServiceClient(faceApiKey, faceApiUrl);
+            var faceServiceClient = new FaceServiceClient(_faceApiKey, _faceApiUrl);
 
             // Try to create the face group
             try
             {
-                faceServiceClient.CreatePersonGroupAsync(faceApiGroup, faceApiGroup);
+                faceServiceClient.CreatePersonGroupAsync(_faceApiGroup, _faceApiGroup);
             }
             catch (Exception)
             {
@@ -138,10 +135,10 @@ namespace DemoWebsite.Web.App_Start
                         try
                         {
                             var personId = Guid.Parse(member.GetValue<string>("personId"));
-                            AsyncHelpers.RunSync(() => faceServiceClient.DeletePersonAsync(faceApiGroup, personId));
+                            AsyncHelpers.RunSync(() => faceServiceClient.DeletePersonAsync(_faceApiGroup, personId));
                         }
                         catch (Exception) {
-                            // ignored
+                            // ignored 
                         }
                     }
 
@@ -152,27 +149,24 @@ namespace DemoWebsite.Web.App_Start
                             () => faceServiceClient.DetectAsync(imageFileStream,false,false,new []{ FaceAttributeType.Age, FaceAttributeType.Gender }));
 
                         member.SetValue("Age", detectface.First().FaceAttributes.Age.ToString());
-                        member.SetValue("Gender", detectface.First().FaceAttributes.Gender.ToString());
+                        member.SetValue("Gender", detectface.First().FaceAttributes.Gender);
                     }
 
                     // Create a person
-                    CreatePersonResult person = AsyncHelpers.RunSync(() => faceServiceClient.CreatePersonAsync(faceApiGroup, member.Name));
+                    CreatePersonResult person = AsyncHelpers.RunSync(() => faceServiceClient.CreatePersonAsync(_faceApiGroup, member.Name));
                     member.SetValue("personId", person.PersonId.ToString());
-
 
                     // Add face to person and make persistent
                     using (Stream imageFileStream = File.OpenRead(fullPath))
                     {
                         AddPersistedFaceResult result =
                             AsyncHelpers.RunSync(
-                                () => faceServiceClient.AddPersonFaceAsync(faceApiGroup, person.PersonId, imageFileStream));
+                                () => faceServiceClient.AddPersonFaceAsync(_faceApiGroup, person.PersonId, imageFileStream));
                         member.SetValue("faceId", result.PersistedFaceId.ToString());
                     }
 
                     // train the facegroup
-                    faceServiceClient.TrainPersonGroupAsync(faceApiGroup);
-
-
+                    faceServiceClient.TrainPersonGroupAsync(_faceApiGroup);
                 }
             }
         }

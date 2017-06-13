@@ -336,8 +336,7 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="App_Start\MediaEventHandler.cs" />
-    <Compile Include="App_Start\MemberEventHandler.cs" />
+    <Compile Include="App_Start\UmbracoEventsHandler.cs" />
     <Compile Include="Helpers\AsyncHelper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
