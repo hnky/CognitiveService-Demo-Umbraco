@@ -34,27 +34,25 @@ namespace DemoWebsite.Web
         private readonly string _faceApiUrl = ConfigurationManager.AppSettings["FaceApiUrl"];
         private readonly string _faceApiGroup = ConfigurationManager.AppSettings["FaceApiGroup"];
 
+        private readonly MediaFileSystem _fs = FileSystemProviderManager.Current.GetFileSystemProvider<MediaFileSystem>();
+
         protected override void ApplicationStarted(UmbracoApplicationBase umbracoApplication, ApplicationContext applicationContext)
         {
             MediaService.Saving += MediaService_Saving;
             MemberService.Saving +=  MemberService_Saving;
+            MemberService.Deleting += MemberService_Deleting;
         }
 
         private void MediaService_Saving(IMediaService sender, SaveEventArgs<Umbraco.Core.Models.IMedia> e)
         {
-
-            var fs = FileSystemProviderManager.Current.GetFileSystemProvider<MediaFileSystem>();
-
             VisionServiceClient visionServiceClient = new VisionServiceClient(_visionApiKey, _visionApiUrl);
 
             FaceServiceClient faceServiceClient = new FaceServiceClient(_faceApiKey, _faceApiUrl);
 
-
             foreach (IMedia media in e.SavedEntities)
             {
                 string relativeImagePath = GetImageFilePath(media);
-                string fullPath = fs.GetFullPath(relativeImagePath);
-
+                string fullPath = _fs.GetFullPath(relativeImagePath);
 
                 using (Stream imageFileStream = File.OpenRead(fullPath))
                 {
@@ -74,10 +72,9 @@ namespace DemoWebsite.Web
                     media.SetValue("isAdult", isAdult);
                 }
 
-
                 using (Stream imageFileStream = File.OpenRead(fullPath))
                 {
-                    var faces = AsyncHelpers.RunSync(() => faceServiceClient.DetectAsync(imageFileStream,true));
+                    var faces = AsyncHelpers.RunSync(() => faceServiceClient.DetectAsync(imageFileStream));
 
                     if (faces.Any())
                     {
@@ -107,7 +104,7 @@ namespace DemoWebsite.Web
 
         private void MemberService_Saving(IMemberService sender, SaveEventArgs<IMember> e)
         {
-            var fs = FileSystemProviderManager.Current.GetFileSystemProvider<MediaFileSystem>();
+
             var umbracoHelper = new UmbracoHelper(UmbracoContext.Current);
 
             var faceServiceClient = new FaceServiceClient(_faceApiKey, _faceApiUrl);
@@ -127,7 +124,7 @@ namespace DemoWebsite.Web
                 if (!string.IsNullOrWhiteSpace(member.GetValue<string>("profilePicture")))
                 {
                     var media = umbracoHelper.TypedMedia(member.GetValue("profilePicture"));
-                    string fullPath = fs.GetFullPath(media.Url);
+                    string fullPath = _fs.GetFullPath(media.Url);
 
                     // Let's delete the person from the list
                     if(!string.IsNullOrWhiteSpace(member.GetValue<string>("personId")))
@@ -164,15 +161,33 @@ namespace DemoWebsite.Web
                                 () => faceServiceClient.AddPersonFaceAsync(_faceApiGroup, person.PersonId, imageFileStream));
                         member.SetValue("faceId", result.PersistedFaceId.ToString());
                     }
-
-                    // train the facegroup
-                    faceServiceClient.TrainPersonGroupAsync(_faceApiGroup);
                 }
+
+                // train the facegroup
+                faceServiceClient.TrainPersonGroupAsync(_faceApiGroup);
             }
         }
 
+        private void MemberService_Deleting(IMemberService sender, DeleteEventArgs<IMember> deleteEventArgs)
+        {
+            var faceServiceClient = new FaceServiceClient(_faceApiKey, _faceApiUrl);
 
-
+            foreach (IMember member in deleteEventArgs.DeletedEntities)
+            {
+                if (!string.IsNullOrWhiteSpace(member.GetValue<string>("personId")))
+                {
+                    try
+                    {
+                        var personId = Guid.Parse(member.GetValue<string>("personId"));
+                        AsyncHelpers.RunSync(() => faceServiceClient.DeletePersonAsync(_faceApiGroup, personId));
+                    }
+                    catch
+                    {
+                        // ignored
+                    }
+                }
+            }
+        }
 
 
         private string GetImageFilePath(IMedia media)
