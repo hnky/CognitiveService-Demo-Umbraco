@@ -1,4 +1,4 @@
-# Adding Cognitive Services and Face recognition to Umbraco
+# Using Cognitive Services in Umbraco
 
 This sample code show's how to add the [Computer Vision Service](https://azure.microsoft.com/en-gb/services/cognitive-services/face/) and [Face Api](https://azure.microsoft.com/en-gb/services/cognitive-services/face/) to Umbraco.
 
