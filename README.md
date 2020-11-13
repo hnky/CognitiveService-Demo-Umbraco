@@ -1,6 +1,6 @@
 # Using Cognitive Services in Umbraco
 
-This sample code show's how to add the [Computer Vision Service](https://azure.microsoft.com/en-gb/services/cognitive-services/computer-vision//face/) and [Face Api](https://azure.microsoft.com/en-gb/services/cognitive-services/face/) to Umbraco.
+This sample code show's how to add the [Computer Vision Service](https://azure.microsoft.com/services/cognitive-services/computer-vision//face/?WT.mc_id=aiml-0000-heboelma) and [Face Api](https://azure.microsoft.com/services/cognitive-services/face/?WT.mc_id=aiml-0000-heboelma) to Umbraco.
 
 All the magic happens in two event handlers  
 * Face API in file [App_Start/FaceEventsHandler.cs](./DemoWebsite.Web/App_Start/FaceEventsHandler.cs)  
